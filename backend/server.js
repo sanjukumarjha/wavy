@@ -12,7 +12,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Health check endpoint for Render
+// Health check endpoint for Render to prevent unnecessary restarts
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });

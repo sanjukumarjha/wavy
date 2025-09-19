@@ -11,12 +11,13 @@ WORKDIR /usr/src/app
 COPY . .
 
 # 5. Install all dependencies from the root
+# This will trigger the postinstall script in your package.json
 RUN npm install
 
 # 6. Build the React frontend
 RUN npm run build
 
-# 7. Expose the port
+# 7. Expose the port Render uses
 EXPOSE 10000
 
 # 8. The command to start the server
