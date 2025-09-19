@@ -6,6 +6,7 @@ WORKDIR /usr/src/app
 
 # Copy ONLY the package files for the frontend
 COPY frontend/package.json ./frontend/
+COPY frontend/package-lock.json ./frontend/
 
 # Install frontend dependencies cleanly
 RUN npm install --prefix frontend
@@ -27,6 +28,7 @@ WORKDIR /usr/src/app
 
 # Copy ONLY the package files for the backend
 COPY backend/package.json ./backend/
+COPY backend/package-lock.json ./backend/
 
 # Install ONLY production dependencies for the backend
 RUN npm install --prefix backend --omit=dev
