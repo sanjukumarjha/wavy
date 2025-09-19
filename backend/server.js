@@ -7,11 +7,11 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-app.use(cors()); // Use a simpler CORS configuration
+app.use(cors());
 app.use(express.json());
 
 // --- SERVE THE BUILT REACT APP ---
-// This line tells Express to serve the static HTML, CSS, and JS
+// This line tells Express to serve the static HTML, CSS, and JS from the build folder
 app.use(express.static(path.join(__dirname, '..', 'frontend', 'dist')));
 
 // Health check endpoint for Render
@@ -26,16 +26,14 @@ app.post('/api/convert', async (req, res) => {
     }
 
     try {
-        console.log(`[INFO] Fetching info for URL: ${url}`);
         const info = await ytdl.getInfo(url);
         const title = info.videoDetails.title.replace(/[^\w\s.-]/gi, '_');
-
         res.setHeader('Content-Disposition', `attachment; filename="${title}.wav"`);
         res.setHeader('Content-Type', 'audio/wav');
 
         const audioStream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
         const ffmpegProcess = spawn('ffmpeg', ['-i', 'pipe:0', '-f', 'wav', '-ar', '44100', 'pipe:1'], { stdio: ['pipe', 'pipe', 'pipe'] });
-
+        
         audioStream.pipe(ffmpegProcess.stdin);
         ffmpegProcess.stdout.pipe(res);
 
