@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Music, Play, Volume2, XCircle, CheckCircle } from 'lucide-react';
 
-// Your live backend URL
 const BACKEND_URL = 'https://wavy-m4hw.onrender.com';
 
 function App() {
   const [inputValue, setInputValue] = useState('');
   const [currentTheme, setCurrentTheme] = useState('default');
   const [status, setStatus] = useState({ message: 'Ready - Paste a URL to get started', type: 'idle' });
+  const [downloadTitle, setDownloadTitle] = useState('download.wav');
 
-  // Theme detection logic
   useEffect(() => {
     const detectTheme = (url: string) => {
       if (!url.trim()) return 'default';
@@ -21,39 +20,57 @@ function App() {
     setCurrentTheme(newTheme);
   }, [inputValue]);
 
-  // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
     setStatus({ message: 'Ready', type: 'idle' });
   };
 
-  // Download handler pointing to your live backend
   const handleDownload = async () => {
     if (!inputValue.trim()) return;
     setStatus({ message: 'Preparing download...', type: 'loading' });
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: inputValue }),
       });
-      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error(data.error || 'An unknown error occurred.');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'An unknown server error occurred.');
       }
+
+      // Extract filename from the Content-Disposition header
+      const disposition = response.headers.get('content-disposition');
+      let filename = 'download.wav';
+      if (disposition && disposition.indexOf('attachment') !== -1) {
+        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+        const matches = filenameRegex.exec(disposition);
+        if (matches != null && matches[1]) {
+          filename = matches[1].replace(/['"]/g, '');
+        }
+      }
+      setDownloadTitle(filename);
+
       setStatus({ message: 'Success! Your download will start now.', type: 'success' });
+
+      // Handle the file stream
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = data.downloadUrl;
-      link.setAttribute('download', '');
+      link.href = downloadUrl;
+      link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
     } catch (error: any) {
       setStatus({ message: `Error: ${error.message}`, type: 'error' });
     }
   };
 
-  // Get theme-appropriate icon
   const getThemeIcon = () => {
     switch (currentTheme) {
       case 'youtube': return <Play className="w-8 h-8" />;

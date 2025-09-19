@@ -1,8 +1,6 @@
 const express = require('express');
 const ytdl = require('ytdl-core');
 const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
 const cors = require('cors');
 
 const app = express();
@@ -26,28 +24,26 @@ app.post('/api/convert', async (req, res) => {
         const info = await ytdl.getInfo(url);
         const title = info.videoDetails.title.replace(/[^\w\s.-]/gi, '_');
 
-        // Set headers for the download
+        // Set headers to stream a file download
         res.setHeader('Content-Disposition', `attachment; filename="${title}.wav"`);
         res.setHeader('Content-Type', 'audio/wav');
 
         const audioStream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
 
-        // Spawn FFmpeg process to stream directly to the response
         const ffmpegProcess = spawn('ffmpeg', [
             '-i', 'pipe:0',      // Input from stdin
             '-f', 'wav',         // Format to WAV
             '-ar', '44100',      // Audio sampling rate
-            '-ac', '2',          // Stereo audio
             'pipe:1'             // Output to stdout
         ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
         // Pipe the YouTube stream to FFmpeg's input
         audioStream.pipe(ffmpegProcess.stdin);
 
-        // Pipe FFmpeg's output directly to the user's download response
+        // Pipe FFmpeg's output directly to the user's browser
         ffmpegProcess.stdout.pipe(res);
 
-        // --- Error Handling ---
+        // --- Error and Completion Handling ---
         audioStream.on('error', (err) => {
             console.error('[ERROR] Audio Stream Error:', err);
             if (!res.headersSent) {
@@ -56,16 +52,12 @@ app.post('/api/convert', async (req, res) => {
         });
 
         ffmpegProcess.stderr.on('data', (data) => {
-            // Log ffmpeg errors/progress for debugging, but don't send to user
             console.error(`[FFMPEG STDERR] ${data}`);
         });
 
-        ffmpegProcess.on('close', (code) => {
-            if (code !== 0) {
-                console.error(`[FATAL] FFmpeg exited with non-zero code: ${code}`);
-            }
+        ffmpegProcess.on('close', () => {
             console.log('[INFO] Stream finished.');
-            res.end(); // End the response when FFmpeg is done
+            res.end();
         });
 
     } catch (error) {
