@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Music, Play, Volume2, XCircle, CheckCircle } from 'lucide-react';
 
-// Your new live backend URL is now included
+// Your live backend URL
 const BACKEND_URL = 'https://wavy-m4hw.onrender.com';
 
 function App() {
@@ -9,7 +9,7 @@ function App() {
   const [currentTheme, setCurrentTheme] = useState('default');
   const [status, setStatus] = useState({ message: 'Ready - Paste a URL to get started', type: 'idle' });
 
-  // Theme detection logic (no changes here)
+  // Theme detection logic
   useEffect(() => {
     const detectTheme = (url: string) => {
       if (!url.trim()) return 'default';
@@ -24,40 +24,30 @@ function App() {
   // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
-    setStatus({ message: 'Ready', type: 'idle' }); // Reset status on new input
+    setStatus({ message: 'Ready', type: 'idle' });
   };
 
-  // --- DOWNLOAD HANDLER WITH LIVE URL ---
+  // Download handler pointing to your live backend
   const handleDownload = async () => {
     if (!inputValue.trim()) return;
-
     setStatus({ message: 'Preparing download...', type: 'loading' });
-
     try {
-      const response = await fetch(`${BACKEND_URL}/api/convert`, { // This now points to your live server
+      const response = await fetch(`${BACKEND_URL}/api/convert`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: inputValue }),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'An unknown error occurred.');
       }
-
       setStatus({ message: 'Success! Your download will start now.', type: 'success' });
-
-      // Create a temporary link to trigger the download
       const link = document.createElement('a');
       link.href = data.downloadUrl;
-      link.setAttribute('download', ''); // This encourages the browser to download
+      link.setAttribute('download', '');
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
     } catch (error: any) {
       setStatus({ message: `Error: ${error.message}`, type: 'error' });
     }
@@ -82,7 +72,6 @@ function App() {
           <h1 className="title">AudioGrab</h1>
           <p className="subtitle">Download audio from YouTube and Spotify</p>
         </div>
-
         <div className="input-section">
           <input
             type="url"
@@ -92,7 +81,6 @@ function App() {
             className="url-input"
           />
         </div>
-
         <div className="button-section">
           <button
             onClick={handleDownload}
@@ -112,7 +100,6 @@ function App() {
             )}
           </button>
         </div>
-
         <div className="status-section">
           <div className={`status-indicator status-${status.type}`}>
             {status.type === 'error' && <XCircle className="w-5 h-5" />}
