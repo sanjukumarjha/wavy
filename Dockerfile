@@ -1,30 +1,47 @@
-# 1. Start with a Node.js 18 base image
+# --- STAGE 1: Build the Frontend ---
+# Use a full Node.js 18 image which has all the necessary build tools
+FROM node:18 as builder
+
+# Set the working directory for the frontend build
+WORKDIR /usr/src/app/frontend
+
+# Copy only the package files for the frontend to leverage caching
+COPY frontend/package*.json ./
+
+# Install frontend dependencies cleanly
+RUN npm install
+
+# Copy the rest of the frontend source code
+COPY frontend/. .
+
+# Run the build command to create the final static files
+RUN npm run build
+
+# --- STAGE 2: Create the Final, Lightweight Production Server ---
+# Use the lightweight "slim" image for the final server to save resources
 FROM node:18-slim
 
-# 2. Install FFmpeg
+# Install FFmpeg, which is required for the backend to run
 RUN apt-get update && apt-get install -y ffmpeg
 
-# 3. Set up the working directory
+# Set the working directory for the server
 WORKDIR /usr/src/app
 
-# 4. Copy all package configuration files first
-COPY package*.json ./
-COPY frontend/package*.json ./frontend/
+# Copy only the backend's package files
 COPY backend/package*.json ./backend/
 
-# 5. Install backend and frontend dependencies in their own folders
-# This is the key fix to prevent conflicts
-RUN npm install --prefix backend
-RUN npm install --prefix frontend
+# Install only the backend's production dependencies
+RUN npm install --prefix backend --omit=dev
 
-# 6. Copy the rest of your project source code
-COPY . .
+# Copy the backend source code
+COPY backend/. ./backend/
 
-# 7. Build the React frontend
-RUN npm run build --prefix frontend
+# --- This is the magic step ---
+# Copy the already-built frontend files from the "builder" stage into the final server
+COPY --from=builder /usr/src/app/frontend/dist ./frontend/dist
 
-# 8. Expose the port Render uses
+# Expose the port Render will use
 EXPOSE 10000
 
-# 9. The command to start the server directly
+# The command to start the server
 CMD [ "node", "backend/server.js" ]
