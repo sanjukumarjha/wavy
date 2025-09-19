@@ -1,3 +1,16 @@
+# Dependencies
+/node_modules
+/frontend/node_modules
+/backend/node_modules
+
+# Lockfiles
+package-lock.json
+frontend/package-lock.json
+backend/package-lock.json
+
+# Build output
+/frontend/dist
+
 # Logs
 logs
 *.log
@@ -7,19 +20,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Misc
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
