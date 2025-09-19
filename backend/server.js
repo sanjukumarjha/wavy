@@ -12,8 +12,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// --- HEALTH CHECK ENDPOINT ---
-// This route is used by Render to check if the service is live.
+// Health check endpoint for Render
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
@@ -21,12 +20,12 @@ app.get('/health', (req, res) => {
 app.post('/api/convert', async (req, res) => {
     const { url } = req.body;
 
-    if (!url || !ytdl.validateURL(url)) {
-        return res.status(400).json({ error: 'Please provide a valid YouTube URL.' });
+    if (!url) {
+        return res.status(400).json({ error: 'Please provide a URL.' });
     }
 
     try {
-        console.log(`[INFO] Fetching info for URL: ${url}`);
+        console.log(`[INFO] Validating and fetching info for URL: ${url}`);
         const info = await ytdl.getInfo(url);
         const title = info.videoDetails.title.replace(/[^\w\s.-]/gi, '_');
 
@@ -45,25 +44,28 @@ app.post('/api/convert', async (req, res) => {
         audioStream.pipe(ffmpegProcess.stdin);
         ffmpegProcess.stdout.pipe(res);
 
-        audioStream.on('error', (err) => {
-            console.error('[ERROR] Audio Stream Error:', err);
-            if (!res.headersSent) res.status(500).send('Error reading video stream.');
-        });
+        const onStreamError = (streamName, err) => {
+            console.error(`[FATAL] Error in ${streamName}:`, err);
+            if (!res.headersSent) {
+                res.status(500).json({ error: `An error occurred in the ${streamName}.` });
+            }
+            res.end();
+        };
 
-        ffmpegProcess.stderr.on('data', (data) => {
-            console.error(`[FFMPEG STDERR] ${data}`);
-        });
+        audioStream.on('error', (err) => onStreamError('Audio Stream', err));
+        ffmpegProcess.stdin.on('error', (err) => onStreamError('FFmpeg STDIN', err));
+        ffmpegProcess.stdout.on('error', (err) => onStreamError('FFmpeg STDOUT', err));
+        ffmpegProcess.stderr.on('data', (data) => console.error(`[FFMPEG STDERR] ${data}`));
 
-        ffmpegProcess.on('close', (code) => {
-            if (code !== 0) console.error(`[FATAL] FFmpeg exited with code ${code}`);
-            else console.log('[INFO] Stream finished.');
+        ffmpegProcess.on('close', () => {
+            console.log('[INFO] FFmpeg process closed.');
             res.end();
         });
 
     } catch (error) {
-        console.error('[FATAL] Main catch block error:', error);
+        console.error('[FATAL] Main catch block error:', error.message);
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Could not process video. It may be private or age-restricted.' });
+            res.status(400).json({ error: 'Invalid YouTube URL or video is private/unavailable.' });
         }
     }
 });
