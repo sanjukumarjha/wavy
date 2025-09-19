@@ -4,15 +4,17 @@ FROM node:18 as builder
 
 WORKDIR /usr/src/app
 
-# Copy ONLY the package files for the frontend
+# Copy ONLY the package.json files to leverage Docker caching
 COPY frontend/package.json ./frontend/
-COPY frontend/package-lock.json ./frontend/
+COPY backend/package.json ./backend/
 
-# Install frontend dependencies cleanly
+# Install dependencies for both frontend and backend cleanly
+# This will generate a new, compatible package-lock.json inside the container
 RUN npm install --prefix frontend
+RUN npm install --prefix backend
 
-# Copy the rest of the frontend source code
-COPY frontend/. ./frontend/
+# Copy the rest of the source code
+COPY . .
 
 # Build the frontend
 RUN npm run build --prefix frontend
@@ -26,18 +28,13 @@ RUN apt-get update && apt-get install -y ffmpeg
 
 WORKDIR /usr/src/app
 
-# Copy ONLY the package files for the backend
-COPY backend/package.json ./backend/
-COPY backend/package-lock.json ./backend/
+# Copy dependencies from the builder stage
+COPY --from=builder /usr/src/app/frontend/node_modules ./frontend/node_modules
+COPY --from=builder /usr/src/app/backend/node_modules ./backend/node_modules
 
-# Install ONLY production dependencies for the backend
-RUN npm install --prefix backend --omit=dev
-
-# Copy the backend source code
-COPY backend/. ./backend/
-
-# Copy the already-built frontend from the builder stage
+# Copy the already-built frontend and the backend source code
 COPY --from=builder /usr/src/app/frontend/dist ./frontend/dist
+COPY backend/. ./backend/
 
 # Expose the port Render uses
 EXPOSE 10000
