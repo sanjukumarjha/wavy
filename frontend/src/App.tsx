@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Music, Play, Volume2, XCircle, CheckCircle } from 'lucide-react';
 
+// Your new live backend URL is now included
+const BACKEND_URL = 'https://wavy-m4hw.onrender.com';
+
 function App() {
   const [inputValue, setInputValue] = useState('');
   const [currentTheme, setCurrentTheme] = useState('default');
@@ -24,14 +27,14 @@ function App() {
     setStatus({ message: 'Ready', type: 'idle' }); // Reset status on new input
   };
 
-  // --- MODIFIED DOWNLOAD HANDLER ---
+  // --- DOWNLOAD HANDLER WITH LIVE URL ---
   const handleDownload = async () => {
     if (!inputValue.trim()) return;
 
     setStatus({ message: 'Preparing download...', type: 'loading' });
 
     try {
-      const response = await fetch('/api/convert', {
+      const response = await fetch(`${BACKEND_URL}/api/convert`, { // This now points to your live server
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
