@@ -14,11 +14,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-const downloadsDir = path.join(__dirname, 'downloads');
-if (!fs.existsSync(downloadsDir)) {
-    fs.mkdirSync(downloadsDir);
-}
-
 app.post('/api/convert', async (req, res) => {
     const { url } = req.body;
 
@@ -30,51 +25,47 @@ app.post('/api/convert', async (req, res) => {
         console.log(`[INFO] Fetching info for URL: ${url}`);
         const info = await ytdl.getInfo(url);
         const title = info.videoDetails.title.replace(/[^\w\s.-]/gi, '_');
-        const outputFilePath = path.join(downloadsDir, `${title}.wav`);
+
+        // Set headers for the download
+        res.setHeader('Content-Disposition', `attachment; filename="${title}.wav"`);
+        res.setHeader('Content-Type', 'audio/wav');
 
         const audioStream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
 
-        // Use spawn to call ffmpeg directly with specific arguments
+        // Spawn FFmpeg process to stream directly to the response
         const ffmpegProcess = spawn('ffmpeg', [
-            '-i', 'pipe:0',
-            '-f', 'wav',
-            '-ar', '44100',
-            '-ac', '2',
-            'pipe:1'
-        ], { stdio: ['pipe', 'pipe', 'pipe'] }); // Pipe stdin, stdout, stderr
+            '-i', 'pipe:0',      // Input from stdin
+            '-f', 'wav',         // Format to WAV
+            '-ar', '44100',      // Audio sampling rate
+            '-ac', '2',          // Stereo audio
+            'pipe:1'             // Output to stdout
+        ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-        // Pipe the audio stream to ffmpeg's stdin
+        // Pipe the YouTube stream to FFmpeg's input
         audioStream.pipe(ffmpegProcess.stdin);
 
-        // Pipe ffmpeg's stdout to a file
-        const fileWriteStream = fs.createWriteStream(outputFilePath);
-        ffmpegProcess.stdout.pipe(fileWriteStream);
+        // Pipe FFmpeg's output directly to the user's download response
+        ffmpegProcess.stdout.pipe(res);
 
-        // Error handling for all processes
+        // --- Error Handling ---
         audioStream.on('error', (err) => {
             console.error('[ERROR] Audio Stream Error:', err);
-            if (!res.headersSent) res.status(500).json({ error: 'Error reading video stream.' });
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Error reading video stream.' });
+            }
         });
 
         ffmpegProcess.stderr.on('data', (data) => {
+            // Log ffmpeg errors/progress for debugging, but don't send to user
             console.error(`[FFMPEG STDERR] ${data}`);
         });
 
         ffmpegProcess.on('close', (code) => {
-            if (code === 0) {
-                console.log('[SUCCESS] Conversion finished.');
-                res.download(outputFilePath, `${title}.wav`, (err) => {
-                    if (err) console.error('[ERROR] File send error:', err);
-                    // Clean up the file after sending
-                    fs.unlink(outputFilePath, (unlinkErr) => {
-                        if (unlinkErr) console.error('[ERROR] Cleanup error:', unlinkErr);
-                        else console.log('[INFO] Temp file deleted.');
-                    });
-                });
-            } else {
-                console.error(`[FATAL] FFmpeg exited with code ${code}`);
-                if (!res.headersSent) res.status(500).json({ error: 'Conversion process failed.' });
+            if (code !== 0) {
+                console.error(`[FATAL] FFmpeg exited with non-zero code: ${code}`);
             }
+            console.log('[INFO] Stream finished.');
+            res.end(); // End the response when FFmpeg is done
         });
 
     } catch (error) {
