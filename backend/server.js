@@ -1,12 +1,9 @@
 const express = require('express');
 const ytdl = require('ytdl-core');
-const ffmpeg = require('fluent-ffmpeg');
+const { spawn } = require('child_process'); // Use Node's built-in child_process
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
-
-const ffmpegPath = '/usr/bin/ffmpeg';
-ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,7 +18,6 @@ const downloadsDir = path.join(__dirname, 'downloads');
 if (!fs.existsSync(downloadsDir)) {
     fs.mkdirSync(downloadsDir);
 }
-app.use('/downloads', express.static(downloadsDir));
 
 app.post('/api/convert', async (req, res) => {
     const { url } = req.body;
@@ -34,34 +30,49 @@ app.post('/api/convert', async (req, res) => {
         const info = await ytdl.getInfo(url);
         const title = info.videoDetails.title.replace(/[^\w\s.-]/gi, '_');
         const outputFilePath = path.join(downloadsDir, `${title}.wav`);
+
         const audioStream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
 
-        ffmpeg(audioStream)
-            .audioBitrate(1411)
-            .toFormat('wav')
-            .on('end', () => {
-                // Send the file for download
+        // Call ffmpeg directly
+        const ffmpegProcess = spawn('ffmpeg', [
+            '-i', 'pipe:0',      // Input from stdin
+            '-f', 'wav',         // Format to WAV
+            '-ar', '44100',      // Audio sampling rate
+            '-ac', '2',          // 2 audio channels (stereo)
+            outputFilePath
+        ]);
+
+        audioStream.pipe(ffmpegProcess.stdin);
+
+        ffmpegProcess.on('error', (err) => {
+            console.error('FFmpeg process error:', err);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Failed during conversion process.' });
+            }
+        });
+
+        ffmpegProcess.on('close', (code) => {
+            if (code === 0) {
+                console.log('Conversion finished successfully.');
                 res.download(outputFilePath, `${title}.wav`, (err) => {
                     if (err) {
                         console.error('Error sending file:', err);
                     }
-                    // **DELETE THE FILE AFTER SENDING**
                     fs.unlink(outputFilePath, (unlinkErr) => {
-                        if (unlinkErr) {
-                            console.error('Error deleting file:', unlinkErr);
-                        } else {
-                            console.log('Successfully deleted file:', outputFilePath);
-                        }
+                        if (unlinkErr) console.error('Error deleting temp file:', unlinkErr);
+                        else console.log('Successfully deleted temp file.');
                     });
                 });
-            })
-            .on('error', (err) => {
+            } else {
+                console.error(`FFmpeg exited with code ${code}`);
                 if (!res.headersSent) {
-                    res.status(500).json({ error: 'A conversion error occurred.' });
+                    res.status(500).json({ error: 'FFmpeg conversion failed.' });
                 }
-            })
-            .save(outputFilePath);
+            }
+        });
+
     } catch (error) {
+        console.error('Main processing error:', error);
         if (!res.headersSent) {
             res.status(500).json({ error: 'Could not process the video.' });
         }
