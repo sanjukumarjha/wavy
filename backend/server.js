@@ -1,6 +1,6 @@
 const express = require('express');
 const ytdl = require('ytdl-core');
-const { spawn } = require('child_process'); // Use Node's built-in child_process
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
@@ -27,54 +27,60 @@ app.post('/api/convert', async (req, res) => {
     }
 
     try {
+        console.log(`[INFO] Fetching info for URL: ${url}`);
         const info = await ytdl.getInfo(url);
         const title = info.videoDetails.title.replace(/[^\w\s.-]/gi, '_');
         const outputFilePath = path.join(downloadsDir, `${title}.wav`);
 
         const audioStream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
 
-        // Call ffmpeg directly
+        // Use spawn to call ffmpeg directly with specific arguments
         const ffmpegProcess = spawn('ffmpeg', [
-            '-i', 'pipe:0',      // Input from stdin
-            '-f', 'wav',         // Format to WAV
-            '-ar', '44100',      // Audio sampling rate
-            '-ac', '2',          // 2 audio channels (stereo)
-            outputFilePath
-        ]);
+            '-i', 'pipe:0',
+            '-f', 'wav',
+            '-ar', '44100',
+            '-ac', '2',
+            'pipe:1'
+        ], { stdio: ['pipe', 'pipe', 'pipe'] }); // Pipe stdin, stdout, stderr
 
+        // Pipe the audio stream to ffmpeg's stdin
         audioStream.pipe(ffmpegProcess.stdin);
 
-        ffmpegProcess.on('error', (err) => {
-            console.error('FFmpeg process error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'Failed during conversion process.' });
-            }
+        // Pipe ffmpeg's stdout to a file
+        const fileWriteStream = fs.createWriteStream(outputFilePath);
+        ffmpegProcess.stdout.pipe(fileWriteStream);
+
+        // Error handling for all processes
+        audioStream.on('error', (err) => {
+            console.error('[ERROR] Audio Stream Error:', err);
+            if (!res.headersSent) res.status(500).json({ error: 'Error reading video stream.' });
+        });
+
+        ffmpegProcess.stderr.on('data', (data) => {
+            console.error(`[FFMPEG STDERR] ${data}`);
         });
 
         ffmpegProcess.on('close', (code) => {
             if (code === 0) {
-                console.log('Conversion finished successfully.');
+                console.log('[SUCCESS] Conversion finished.');
                 res.download(outputFilePath, `${title}.wav`, (err) => {
-                    if (err) {
-                        console.error('Error sending file:', err);
-                    }
+                    if (err) console.error('[ERROR] File send error:', err);
+                    // Clean up the file after sending
                     fs.unlink(outputFilePath, (unlinkErr) => {
-                        if (unlinkErr) console.error('Error deleting temp file:', unlinkErr);
-                        else console.log('Successfully deleted temp file.');
+                        if (unlinkErr) console.error('[ERROR] Cleanup error:', unlinkErr);
+                        else console.log('[INFO] Temp file deleted.');
                     });
                 });
             } else {
-                console.error(`FFmpeg exited with code ${code}`);
-                if (!res.headersSent) {
-                    res.status(500).json({ error: 'FFmpeg conversion failed.' });
-                }
+                console.error(`[FATAL] FFmpeg exited with code ${code}`);
+                if (!res.headersSent) res.status(500).json({ error: 'Conversion process failed.' });
             }
         });
 
     } catch (error) {
-        console.error('Main processing error:', error);
+        console.error('[FATAL] Main catch block error:', error);
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Could not process the video.' });
+            res.status(500).json({ error: 'Could not process video. It may be private or age-restricted.' });
         }
     }
 });
