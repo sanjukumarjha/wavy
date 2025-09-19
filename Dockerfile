@@ -7,18 +7,23 @@ RUN apt-get update && apt-get install -y ffmpeg
 # 3. Set up the working directory
 WORKDIR /usr/src/app
 
-# 4. Copy all project files
+# 4. Copy all package configuration files
+COPY package*.json ./
+COPY frontend/package*.json ./frontend/
+COPY backend/package*.json ./backend/
+
+# 5. Install backend and frontend dependencies separately and cleanly
+RUN npm install --prefix backend
+RUN npm install --prefix frontend
+
+# 6. Copy the rest of your project source code
 COPY . .
 
-# 5. Install all dependencies from the root
-# This will trigger the postinstall script in your package.json
-RUN npm install
+# 7. Build the React frontend
+RUN npm run build --prefix frontend
 
-# 6. Build the React frontend
-RUN npm run build
-
-# 7. Expose the port Render uses
+# 8. Expose the port Render uses
 EXPOSE 10000
 
-# 8. The command to start the server
-CMD [ "npm", "start" ]
+# 9. The command to start the server
+CMD [ "node", "backend/server.js" ]
