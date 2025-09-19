@@ -26,8 +26,13 @@ jobs:
           node-version: 18
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
-      - name: Install dependencies with ci
-        run: npm ci # This is the corrected line
+
+      # THIS IS THE NEW STEP TO FIX THE ERROR
+      - name: Remove package-lock.json
+        run: rm ./frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
         working-directory: ./frontend
       - name: Build
         run: npm run build
